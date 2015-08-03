@@ -743,36 +743,40 @@ class Site_Command extends Terminus_Command {
     *
     */
    public function deploy($args, $assoc_args) {
-     $site = SiteFactory::instance( Input::site( $assoc_args ) );
-     $env = Input::env($assoc_args);
-     $from = Input::env($assoc_args, 'from', "Choose environment you want to deploy from");
-     if (!isset($assoc_args['note'])) {
-       $note = Terminus::prompt("Custom note for the Deploy Log", array(), "Deploy from Terminus 2.0");
+     $site = SiteFactory::instance(Input::site($assoc_args));
+     $env = $site->environment(Input::env(
+       $assoc_args,
+       'env',
+       'Choose environment you want to deploy to'
+     ));
+     $from = Input::env($assoc_args, 'from', 'Choose environment you want to deploy from');
+
+     if(!isset($assoc_args['note'])) {
+       $note = Terminus::prompt('Custom note for the deploy log', array(), 'Terminus deployment');
      } else {
        $note = $assoc_args['note'];
      }
 
      $cc = $updatedb = 0;
-     if (array_key_exists('cc',$assoc_args)) {
+     if (array_key_exists('cc', $assoc_args)) {
        $cc = 1;
      }
-     if (array_key_exists('updatedb',$assoc_args)) {
+     if (array_key_exists('updatedb', $assoc_args)) {
        $updatedb = 1;
      }
 
      $params = array(
-       'updatedb' => $updatedb,
-       'cc' => $cc,
-       'from' => $from,
+       'updatedb'   => $updatedb,
+       'cc'         => $cc,
+       'from'       => $from,
        'annotation' => $note
      );
 
-     $deploy = new Deploy($site->environment($env), $params);
-     $response = $deploy->run();
-     $result = $this->waitOnWorkflow('sites', $site->getId(), $response->id);
-     if ($result) {
-       \Terminus::success("Woot! Code deployed to %s", array($env));
+     $result = $env->deploy($params);
+     if($result) {
+       \Terminus::success("Woot! Code deployed to %s", array($env->getName()));
      }
+     return true;
    }
 
   /**

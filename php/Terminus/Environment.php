@@ -344,7 +344,7 @@ class Environment {
   public function deploy($args) {
     $default_params = array(
       'from' => 'dev',
-      'annotation' => 'Terminus deploy',
+      'annotation' => 'Terminus deployment',
       'clear_cache' => true,
       'updatedb' => true,
     );
