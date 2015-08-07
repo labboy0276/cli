@@ -86,9 +86,9 @@ class Site_Command extends Terminus_Command {
    */
   public function clear_caches($args, $assoc_args) {
       $site = SiteFactory::instance(Input::site($assoc_args));
-      $env = Input::env($assoc_args, 'env');
-      $response = $site->environment($env)->workflow("clear_cache");
-      $this->waitOnWorkFlow('sites', $site->getId(), $response->id);
+      $env_id = Input::env($assoc_args, 'env');
+      $workflow = $site->workflows->create('clear_cache', array('environment' => $env_id));
+      $workflow->wait();
       Terminus::success("Caches cleared");
   }
 
@@ -575,7 +575,7 @@ class Site_Command extends Terminus_Command {
        array('test', 'live')
      ));
 
-     $workflow = $env->initializeBindings($deploy_args);
+     $workflow = $env->initializeBindings();
      $workflow->wait();
 
      if($result) {
@@ -637,33 +637,23 @@ class Site_Command extends Terminus_Command {
 
      if ($db) {
        print "Cloning database ... ";
-       $this->cloneObject( $to_env, $from_env, $site_id, 'database');
+       $workflow = $site->workflows->create("clone_database", array(
+         'environment' => $to_env,
+         'params' => array('from_environment' => $from_env)
+       ));
+       $workflow->wait();
      }
 
      if ($files) {
       print "Cloning files ... ";
-      $this->cloneObject( $to_env, $from_env, $site_id, 'files');
+      $workflow = $site->workflows->create("clone_files", array(
+        'environment' => $to_env,
+        'params' => array('from_environment' => $from_env)
+      ));
+      $workflow->wait();
      }
      \Terminus::success("Clone complete!");
      return true;
-   }
-
-
-   // @todo this should be moved to a namespaced class CloneResource
-   private function cloneObject($to_env, $from_env, $site_id, $object_type) {
-     $path = sprintf("environments/%s/%s", $to_env, $object_type);
-
-     $data = array('clone-from-environment'=>$from_env);
-     $OPTIONS = array(
-       'body' => json_encode($data) ,
-       'headers'=> array('Content-type'=>'application/json')
-     );
-     $response = \Terminus_Command::request("sites", $site_id, $path, "POST", $OPTIONS);
-     if ($response) {
-       $this->waitOnWorkflow("sites", $site_id, $response['data']->id);
-       return $response;
-     }
-     return false;
    }
 
   /**
@@ -749,38 +739,45 @@ class Site_Command extends Terminus_Command {
     * : deploy log message
     *
     */
-   public function deploy($args, $assoc_args) {
-     $site = SiteFactory::instance( Input::site( $assoc_args ) );
-     $env = Input::env($assoc_args);
-     $from = Input::env($assoc_args, 'from', "Choose environment you want to deploy from");
-     if (!isset($assoc_args['note'])) {
-       $note = Terminus::prompt("Custom note for the Deploy Log", array(), "Deploy from Terminus 2.0");
-     } else {
-       $note = $assoc_args['note'];
-     }
+  public function deploy($args, $assoc_args) {
+    $site = SiteFactory::instance(Input::site($assoc_args));
+    $env  = $site->environment(Input::env(
+      $assoc_args,
+      'env',
+      'Choose environment to deploy'
+    ));
+    $from = Input::env(
+      $assoc_args,
+      'from',
+      'Choose environment you want to deploy from'
+    );
+    if(!isset($assoc_args['note'])) {
+      $annotation = Terminus::prompt(
+        'Custom note for the deploy log',
+        array(),
+        'Deploy from Terminus 2.0');
+    } else {
+      $annotation = $assoc_args['note'];
+    }
 
-     $cc = $updatedb = 0;
-     if (array_key_exists('cc',$assoc_args)) {
-       $cc = 1;
-     }
-     if (array_key_exists('updatedb',$assoc_args)) {
-       $updatedb = 1;
-     }
+    $cc       = (integer)array_key_exists('cc', $assoc_args);
+    $updatedb = (integer)array_key_exists('updatedb', $assoc_args);
 
-     $params = array(
-       'updatedb' => $updatedb,
-       'cc' => $cc,
-       'from' => $from,
-       'annotation' => $note
-     );
+    $params = array(
+      'updatedb'       => $updatedb,
+      'clear_cache'    => $cc,
+      'annotation'     => $annotation,
+      'clone_database' => array('from_environment' => $from),
+      'clone_files'    => array('from_environment' => $from),
+    );
 
-     $deploy = new Deploy($site->environment($env), $params);
-     $response = $deploy->run();
-     $result = $this->waitOnWorkflow('sites', $site->getId(), $response->id);
-     if ($result) {
-       \Terminus::success("Woot! Code deployed to %s", array($env));
-     }
-   }
+    $workflow = $env->deploy($params);
+    $workflow->wait();
+
+    if($workflow->isSuccessful()) {
+      \Terminus::success("Woot! Code deployed to %s", array($env->getName()));
+    }
+  }
 
   /**
    * List enviroments for a site
@@ -898,18 +895,14 @@ class Site_Command extends Terminus_Command {
     $env = Input::env($assoc_args, 'env');
     switch ($action) {
       case 'info':
-        $data = $locks = $site->environment($env)->lockinfo();
-        if (!Terminus::get_config('json')) {
-          $data = array($data);
-        }
-        $this->handleDisplay($data);
-        break;
+        $info = $site->environment($env)->lockinfo();
+        return $this->handleDisplay($info);
       case 'add':
         Terminus::line("Creating new lock on %s -> %s", array($site->getName(), $env));
         if (!isset($assoc_args['username'])) {
-          $email = Terminus::prompt("Username for the lock");
+          $username = Terminus::prompt("Username for the lock");
         } else {
-          $email = $assoc_args['username'];
+          $username = $assoc_args['username'];
         }
         if (!isset($assoc_args['password'] ) ) {
           exec("stty -echo");
@@ -919,19 +912,18 @@ class Site_Command extends Terminus_Command {
         } else {
           $password = $assoc_args['password'];
         }
-        $data = $site->environment($env)->lock($email, $password);
-        if ( $data AND property_exists($data,'id') ) {
-          $this->waitOnWorkflow('sites',$data->site_id, $data->id);
-        }
-        Terminus::success('Success');
-        break;
+
+        $workflow = $site->environment($env)->lock(array(
+          'username' => $username,
+          'password' => $password
+        ));
+        $workflow->wait();
+        return Terminus::success('Success');
       case 'remove':
         Terminus::line("Removing lock from %s -> %s", array($site->getName(), $env));
-        $data = $site->environment($env)->unlock();
-        if ( property_exists($data,'id') ) {
-          $this->waitOnWorkflow('sites',$data->site_id, $data->id);
-        }
-        Terminus::success('Success');
+        $workflow = $site->environment($env)->unlock();
+        $workflow->wait();
+        return Terminus::success('Success');
     }
   }
 

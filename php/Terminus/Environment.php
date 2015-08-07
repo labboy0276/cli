@@ -26,7 +26,7 @@ class Environment {
   public function __construct(Site $site, $data = null) {
     $this->site = $site;
     if (property_exists($data, 'id')) {
-      $this->id = $data->id;
+      $this->name = $this->id = $data->id;
     }
     $this->attributes = $data;
 
@@ -210,32 +210,38 @@ class Environment {
   }
 
   /**
-   * Lock environment
+   * Enable HTTP Basic Access authentication on the web environment
    */
-  public function lock($username, $password) {
-    $data = json_encode(array('username' => $username, 'password' => $password));
-    $options = array(
-      'body' => $data,
-      'headers' => array('Content-type'=>'application/json')
-    );
-    $response = \Terminus_Command::request("sites", $this->site->getId(), 'environments/' . $this->name . '/lock', "PUT", $options);
-    return $response['data'];
+  public function lock($options = array()) {
+    $username = $options['username'];
+    $password = $options['password'];
+
+    $workflow = $this->site->workflows->create('lock_environment', array(
+      'environment' => $this->id,
+      'params' => array(
+        'username' => $username,
+        'password' => $password
+      )
+    ));
+    return $workflow;
   }
 
   /**
-   * Delete an environment lock.
+   * Disable HTTP Basic Access authentication on the web environment
    */
   public function unlock() {
-    $response = \Terminus_Command::request("sites", $this->site->getId(),  'environments/' . $this->name . '/lock', "DELETE");
-    return $response['data'];
+    $workflow = $this->site->workflows->create('unlock_environment', array(
+      'environment' => $this->id,
+    ));
+    return $workflow;
   }
 
   /**
    * Get Info on an environment lock
    */
   public function lockinfo() {
-    $response = \Terminus_Command::request("sites", $this->site->getId(), 'environments/'.$this->name.'/lock', "GET");
-    return $response['data'];
+    $info = $this->attributes->lock;
+    return $info;
   }
 
   /**
@@ -343,51 +349,42 @@ class Environment {
    */
   public function deploy($args) {
     $default_params = array(
-      'annotation' => 'Terminus deploy'
+      'annotation'     => 'Terminus deploy',
+      'clone_database' => array('from_environment' => 'dev'),
+      'clone_files'    => array('from_environment' => 'dev'),
     );
     $params = array_merge($default_params, $args);
 
     $workflow = $this->site->workflows->create('deploy', array(
       'environment' => $this->id,
-      'params' => $params
+      'params'      => $params
     ));
     return $workflow;
   }
 
   /**
-   * Converges the given environment
+   * Initializes the Test/Live environments on a newly created Site
+   * and clones content from previous environment
+   * (e.g. Test clones Dev content, Live clones Test content)
    *
-   * @return [array] Data from the request
-   */
-  public function converge() {
-    $workflow = $this->site->workflows->create('converge_environment', array('environment' => $this->id));
-    return $workflow;
-  }
-
-  /**
-   * Initializes an environment
-   *
-   * @param [array] $args Arguments for deployment
-   * @return [array] Data from the request
+   * @return [Workflow] in-progress workflow
    */
   public function initializeBindings() {
-    $converge_workflow = $this->converge();
-    $converge_workflow->wait();
-
     if ($this->id == 'test') {
       $from_env_id = 'dev';
     } elseif ($this->id == 'live') {
       $from_env_id = 'test';
     }
 
-    $deploy_args = array(
-      'annotation' => sprintf('Create the %s environment', $this->id),
-      'clone_database' => array('from_environment' => $from_env_id),
-      'clone_files' => array('from_environment' => $from_env_id),
-    );
-
-    $deploy_workflow = $this->deploy($deploy_args);
-    return $deploy_workflow;
+    $workflow = $this->site->workflows->create('deploy', array(
+      'environment' => $this->id,
+      'params' => array(
+        'annotation' => sprintf('Create the %s environment', $this->id),
+        'clone_database' => array('from_environment' => $from_env_id),
+        'clone_files' => array('from_environment' => $from_env_id)
+      )
+    ));
+    return $workflow;
   }
 
   /**
