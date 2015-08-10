@@ -987,8 +987,9 @@ class Site_Command extends Terminus_Command {
    *  terminus site instrument --site=sitename
    */
   public function instrument($args, $assoc_args) {
-    $user = new User();
-    $instruments = $user->instruments()->all();
+    $user        = new User();
+    $instruments = $user->getInstruments()->all();
+    $data        = array();
     foreach($instruments as $instrument) {
       $data[$instrument->get('id')] = $instrument->get('label');
     }

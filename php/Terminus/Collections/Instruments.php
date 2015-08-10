@@ -25,10 +25,7 @@ class Instruments {
     foreach(get_object_vars($results['data']) as $id => $instrument_data) {
       $instrument_data->id = $id;
       $options             = array('user' => $this->user);
-      $this->models[$id]   = new Instrument(
-        $instrument_data,
-        $options
-      );
+      $this->models[$id]   = new Instrument($instrument_data, $options);
     }
 
     return $this;

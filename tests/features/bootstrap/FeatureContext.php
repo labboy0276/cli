@@ -42,7 +42,7 @@ class FeatureContext extends BehatContext {
      * @param [string] $instrument_uuid UUID of a payment instrument
      * @return [void]
      */
-    public function aPaymentInsturmentWithUuid($instrument_uuid) {
+    public function aPaymentInstrumentWithUuid($instrument_uuid) {
       $instruments = $this->iRun('terminus site instrument');
       try {
         $uuid = new PyStringNode(

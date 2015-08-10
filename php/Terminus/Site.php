@@ -311,7 +311,6 @@ class Site {
   /**
    * Removes payment instrument of given site
    *
-   * @params [string] $uuid UUID of new payment instrument
    * @return [Workflow] $workflow Workflow object for the request
    */
   public function removeInstrument() {
@@ -320,11 +319,6 @@ class Site {
     );
     $workflow = $this->workflows->create('disassociate_site_instrument', $args);
     return $workflow;
-  }
-
-  /**
-   * Returns the environment's name
-   *
   }
 
   /**

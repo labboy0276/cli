@@ -15,13 +15,16 @@ class User {
   private $instruments;
 
   public function __construct($id = null) {
-    if (null===$id) {
+    if($id == null) {
       $this->id = Session::getValue('user_uuid');
     } else {
       $this->id = $id;
     }
 
-    $this->workflows = new Workflows(array('owner' => $this, 'owner_type' => 'user'));
+    $this->workflows   = new Workflows(
+      array('owner' => $this, 'owner_type' => 'user')
+    );
+    $this->instruments = new Instruments(array('user' => $this));
     $this->getProfile();
     self::$instance = $this;
     return $this;
@@ -75,9 +78,8 @@ class User {
     return $response['data'];
   }
 
-  public function instruments() {
-    $instruments       = new Instruments(array('user' => $this));
-    $this->instruments = $instruments->fetch();
+  public function getInstruments() {
+    $this->instruments = $this->instruments->fetch();
     return $this->instruments;
   }
 
