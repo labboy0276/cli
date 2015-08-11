@@ -400,67 +400,67 @@ class Site_Command extends Terminus_Command {
   * @subcommand backup
   *
   */
-   public function backup($args, $assoc_args) {
-     $action = array_shift($args);
-     $site = SiteFactory::instance( Input::sitename( $assoc_args ) );
-     $env = Input::env($assoc_args, 'env');
-     switch ($action) {
-       case 'get':
-         //Backward compatability supports "database" as a valid element value.
-         if(@$assoc_args['element'] == 'database') {
-           $assoc_args['element'] = 'db';
-         }
+  public function backup($args, $assoc_args) {
+    $action = array_shift($args);
+    $site = SiteFactory::instance( Input::sitename( $assoc_args ) );
+    $env = Input::env($assoc_args, 'env');
+    switch ($action) {
+      case 'get':
+        //Backward compatability supports "database" as a valid element value.
+        if(@$assoc_args['element'] == 'database') {
+          $assoc_args['element'] = 'db';
+        }
 
-         // prompt for backup type
-         if (!$element = @$assoc_args['element']) {
-           $element = Terminus::menu(array('code','files','db'), null, "Select type backup", TRUE);
-         }
+        // prompt for backup type
+        if (!$element = @$assoc_args['element']) {
+          $element = Terminus::menu(array('code','files','db'), null, "Select type backup", TRUE);
+        }
 
-         if (!in_array($element,array('code','files','db'))) {
-           Terminus::error("Invalid backup element specified.");
-         }
-         $latest = Input::optional('latest',$assoc_args,false);
-         $backups = $site->environment($env)->backups($element, $latest);
-         if (empty($backups)) {
-           \Terminus::error('No backups available.');
-         }
-         $menu = $folders = array();
+        if (!in_array($element,array('code','files','db'))) {
+          Terminus::error("Invalid backup element specified.");
+        }
+        $latest = Input::optional('latest',$assoc_args,false);
+        $backups = $site->environment($env)->backups($element, $latest);
+        if (empty($backups)) {
+          \Terminus::error('No backups available.');
+        }
+        $menu = $folders = array();
 
-         // build a menu for selecting back ups
-         foreach( $backups as $folder => $backup ) {
-           if (!isset($backup->filename)) continue;
-           if (!isset($backup->folder)) $backup->folder = $folder;
-           $buckets[] = $backup->folder;
-           $menu[] = $backup->filename;
-         }
+        // build a menu for selecting back ups
+        foreach( $backups as $folder => $backup ) {
+          if (!isset($backup->filename)) continue;
+          if (!isset($backup->folder)) $backup->folder = $folder;
+          $buckets[] = $backup->folder;
+          $menu[] = $backup->filename;
+        }
 
-         if (empty($menu)) {
-           Terminus::error("No backups available. Create one with `terminus site backup create --site=%s --env=%s`", array($site->getName(),$env));
-         }
+        if (empty($menu)) {
+          Terminus::error("No backups available. Create one with `terminus site backup create --site=%s --env=%s`", array($site->getName(),$env));
+        }
 
-         $index = 0;
-         if (!$latest) {
-           $index = Terminus::menu($menu, null, "Select backup");
-         }
-         $bucket = $buckets[$index];
-         $filename = $menu[$index];
+        $index = 0;
+        if (!$latest) {
+          $index = Terminus::menu($menu, null, "Select backup");
+        }
+        $bucket = $buckets[$index];
+        $filename = $menu[$index];
 
-         $url = $site->environment($env)->backupUrl($bucket,$element);
+        $url = $site->environment($env)->backupUrl($bucket,$element);
 
-         if (isset($assoc_args['to-directory'])) {
-           Terminus::line("Downloading ... please wait ...");
-           $filename = \Terminus\Utils\get_filename_from_url($url->url);
-           $target = sprintf("%s/%s", $assoc_args['to-directory'], $filename);
-           if (Terminus_Command::download($url->url, $target)) {
-             Terminus::success("Downloaded %s", $target);
-             return $target;
-           } else {
-             Terminus::error("Could not download file");
-           }
-         }
-         echo $url->url;
-         return $url->url;
-         break;
+        if (isset($assoc_args['to-directory'])) {
+          Terminus::line("Downloading ... please wait ...");
+          $filename = \Terminus\Utils\get_filename_from_url($url->url);
+          $target = sprintf("%s/%s", $assoc_args['to-directory'], $filename);
+          if (Terminus_Command::download($url->url, $target)) {
+            Terminus::success("Downloaded %s", $target);
+            return $target;
+          } else {
+            Terminus::error("Could not download file");
+          }
+        }
+        echo $url->url;
+        return $url->url;
+        break;
       case 'load':
         $assoc_args['to-directory'] = '/tmp';
         $assoc_args['element'] = 'database';
@@ -489,12 +489,15 @@ class Site_Command extends Terminus_Command {
         $target = Terminus\Utils\sql_from_zip($target);
         $target = escapeshellarg($target);
 
-        if (!$database)
+        if (!$database) {
           $database = escapeshellarg(Terminus::prompt("Name of database to import to"));
-        if (!$username)
+        }
+        if (!$username) {
           $username = escapeshellarg(Terminus::prompt("Username"));
-        if (!$password)
+        }
+        if (!$password) {
           $password = escapeshellarg(Terminus::prompt("Password"));
+        }
 
         exec("mysql $database -u $username -p'$password' < $target", $stdout, $exit);
         if (0 != $exit) {
@@ -518,10 +521,16 @@ class Site_Command extends Terminus_Command {
       case 'list':
       case 'default':
         $backups = $site->environment($env)->backups();
-        $element = @$assoc_args['element'];
+        $element_name = isset($assoc_args['element']) && $assoc_args['element'] != 'all' ? $assoc_args['element'] : false;
+        if ($element_name == 'db') {
+          $element_name = 'database';
+        }
+
         $data = array();
         foreach ($backups as $id => $backup) {
           if (!isset($backup->filename)) continue;
+          if ($element_name && !preg_match(sprintf('/backup_%s/', $element_name), $id)) continue;
+
           $date = 'Pending';
           if (isset($backup->finish_time)) {
             $date = date("Y-m-d H:i:s", $backup->finish_time);
@@ -551,9 +560,9 @@ class Site_Command extends Terminus_Command {
           $this->handleDisplay($data, $args, array('File','Size','Date'));
           return $data;
         }
-      break;
+        break;
     }
-   }
+  }
 
   /**
    * Init dev to test or test to live
