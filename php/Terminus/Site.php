@@ -153,7 +153,7 @@ class Site {
       'organization' => property_exists($this->information, 'organization') ? $this->information->organization : '',
       'service_level' => $this->information->service_level,
       'upstream' => property_exists($this->information, 'upstream') ? (array) $this->information->upstream : '',
-      'php_version' => property_exists($this->information, 'organization') ? $this->information->php_version : '',
+      'php_version' => property_exists($this->information, 'php_version') ? $this->information->php_version : '',
       'sftp_url' => $dev_environment ? $dev_environment->sftp_url() : '',
       'git_url' => $dev_environment ? $dev_environment->git_url() : '',
       'holder_type' =>  $this->information->holder_type,
