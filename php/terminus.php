@@ -30,8 +30,4 @@ else {
 }
 define( 'TERMINUS_PORT', '443' );
 
-if (Terminus::update_available()) {
-  \cli\line(\cli\Colors::colorize("%3%KWarning: There is a newer version of Terminus (". Terminus::version_available().") avaiable %n"));
-}
-
 Terminus::get_runner()->run();
